@@ -1,0 +1,37 @@
+---
+title: MediBook schema in 3NF (MySQL 8, InnoDB) - source of truth database/schema.sql
+---
+erDiagram
+    patients ||--o{ appointments : "1:N via fk_appointments_patient (ON DELETE RESTRICT)"
+    doctors ||--o{ appointments : "1:N via fk_appointments_doctor (ON DELETE RESTRICT)"
+
+    patients {
+        INT_UNSIGNED id PK "NOT NULL, AUTO_INCREMENT"
+        VARCHAR(100) full_name "NOT NULL"
+        VARCHAR(150) email UK "NOT NULL, uq_patients_email, chk_patients_email: shaped like name@domain.tld"
+        VARCHAR(20) phone "NOT NULL"
+        DATETIME created_at "NOT NULL, DEFAULT CURRENT_TIMESTAMP"
+    }
+
+    doctors {
+        INT_UNSIGNED id PK "NOT NULL, AUTO_INCREMENT"
+        VARCHAR(100) full_name "NOT NULL"
+        VARCHAR(60) specialty "NOT NULL"
+        DECIMAL(10,2) consultation_fee "NOT NULL, chk_doctors_fee: >= 0"
+        VARCHAR(10) room "NOT NULL"
+        DATETIME created_at "NOT NULL, DEFAULT CURRENT_TIMESTAMP"
+    }
+
+    appointments {
+        INT_UNSIGNED id PK "NOT NULL, AUTO_INCREMENT"
+        VARCHAR(20) appt_ref UK "NOT NULL, uq_appointments_ref"
+        INT_UNSIGNED patient_id FK "NOT NULL, references patients(id)"
+        INT_UNSIGNED doctor_id FK "NOT NULL, references doctors(id), first column of uq_doctor_active_slot"
+        DATETIME appt_datetime "NOT NULL, chk_appointments_slot_boundary: MINUTE IN (0, 30) AND SECOND = 0, chk_appointments_working_hours: TIME BETWEEN 09:00 AND 16:30"
+        DECIMAL(10,2) amount_paid "NOT NULL, chk_appointments_paid: >= 0, fee captured at booking"
+        ENUM status "NOT NULL, ENUM('booked', 'cancelled'), DEFAULT 'booked'"
+        DATETIME booked_on "NOT NULL, DEFAULT CURRENT_TIMESTAMP"
+        DATETIME cancelled_at "NULL, chk_appointments_cancel_state: set only when status = 'cancelled'"
+        DECIMAL(10,2) refund_amount "NULL, chk_appointments_refund_range: 0 to amount_paid, chk_appointments_cancel_state"
+        DATETIME active_slot UK "GENERATED STORED: appt_datetime while booked, NULL once cancelled. uq_doctor_active_slot UNIQUE (doctor_id, active_slot): a doctor can never hold two booked appointments at the same date/time"
+    }
